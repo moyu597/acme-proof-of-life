@@ -1,0 +1,296 @@
+@page
+@model AcmeStub.Pages.AdminModel
+@{
+    ViewData["Title"] = "Acme Proof of Life";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --green: #1f7a3e;
+            --green-soft: #e8f4ec;
+            --ink: #1a1a1a;
+            --muted: #666;
+            --line: #e0e0e0;
+            --bg: #fafafa;
+            --card: #ffffff;
+            --warn: #c00;
+            --highlight: #fffde4;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            margin: 0; background: var(--bg); color: var(--ink); line-height: 1.55;
+        }
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+        h1 { font-size: 2rem; margin: 0 0 0.25rem; }
+        h2 { font-size: 1.3rem; margin: 2.5rem 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--ink); }
+        h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+        p { margin: 0.4rem 0; }
+        .lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 0.5rem; }
+        .meta { color: var(--muted); font-size: 0.85rem; margin: 0 0 1rem; font-family: ui-monospace, Menlo, monospace; }
+
+        .pill { background: var(--green); color: white; padding: 3px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em; vertical-align: middle; }
+        .pill.warn { background: var(--warn); }
+
+        .stack { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+        .card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
+        .card .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+        .card .value { font-size: 1.05rem; font-weight: 600; margin-top: 0.25rem; word-break: break-word; }
+
+        .panel { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1.25rem 1.5rem; margin-top: 1rem; }
+        .panel.accent { background: var(--green-soft); border-color: var(--green); }
+
+        table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; background: var(--card); }
+        th, td { padding: 8px 14px; border-bottom: 1px solid var(--line); text-align: left; font-size: 0.92rem; }
+        th { background: #f4f4f4; font-weight: 600; }
+        tr.new { background: var(--highlight); transition: background 2s; }
+
+        .btn { background: var(--green); color: white; border: 0; padding: 0.6rem 1.2rem; border-radius: 4px; cursor: pointer; font-size: 0.95rem; font-weight: 500; margin-right: 0.5rem; }
+        .btn:hover { background: #2a9e52; }
+        .btn.secondary { background: #555; }
+        .btn.secondary:hover { background: #777; }
+        input, select { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem; margin-right: 0.5rem; background: white; }
+        label { display: inline-block; margin-right: 0.5rem; }
+        #status { margin-top: 0.75rem; font-size: 0.9rem; color: var(--green); min-height: 1.2em; }
+        #status.error { color: var(--warn); }
+
+        .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+        .link-card { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: 4px; padding: 0.85rem 1rem; text-decoration: none; color: inherit; display: block; transition: transform 0.1s; }
+        .link-card:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        .link-card .num { color: var(--green); font-weight: 700; font-size: 0.8rem; }
+        .link-card .title { font-weight: 600; margin: 0.1rem 0; }
+        .link-card .desc { color: var(--muted); font-size: 0.85rem; }
+
+        .proves { display: grid; grid-template-columns: 1fr 2fr; gap: 0; }
+        .proves > div { padding: 0.6rem 1rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+        .proves > div:nth-child(odd) { font-weight: 600; background: #f8f8f8; }
+
+        code { background: #eee; padding: 1px 6px; border-radius: 3px; font-size: 0.85rem; font-family: ui-monospace, Menlo, monospace; }
+        pre { background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+
+        .footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+        .footer a { color: var(--muted); }
+
+        @@media (max-width: 600px) {
+            .proves { grid-template-columns: 1fr; }
+            .proves > div:nth-child(odd) { padding-bottom: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <h1>Acme Proof of Life <span class="pill">@(Model.DbReachable ? "live" : "degraded")</span></h1>
+    <p class="lede">The target-state architecture from ADR 001, running right now — not a slide deck, not a static repo.</p>
+    <p class="meta">Served by pod <strong>@Model.PodName</strong> · @DateTime.UtcNow.ToString("u")</p>
+
+    <div class="stack">
+        <div class="card">
+            <div class="label">App tier</div>
+            <div class="value">EKS pod (.NET on Linux)</div>
+        </div>
+        <div class="card">
+            <div class="label">Data tier</div>
+            <div class="value">SQL Server 2022 (Edge VPC)</div>
+        </div>
+        <div class="card">
+            <div class="label">Network path</div>
+            <div class="value">VPC peering (ADR 003)</div>
+        </div>
+        <div class="card">
+            <div class="label">Ingress</div>
+            <div class="value">AWS Application Load Balancer</div>
+        </div>
+    </div>
+
+    <h2>1 · See it working</h2>
+    <div class="panel accent">
+        <p style="margin-top:0;"><strong>Insert a row into SQL Server.</strong> Click the button. The request travels: your browser → ALB → this pod → VPC peering → SQL Server in the Edge VPC → back. New row appears below with a yellow highlight.</p>
+
+        <div style="margin-top: 1rem;">
+            <label>Customer:
+                <select id="customerId">
+                    @foreach (var c in Model.Customers)
+                    {
+                        <option value="@c.Id">@c.Id — @c.Name</option>
+                    }
+                </select>
+            </label>
+            <label>Amount: <input id="amount" type="number" step="0.01" value="42.50" style="width: 100px;" /></label>
+            <button class="btn" onclick="createOrder()">Create order</button>
+            <button class="btn secondary" onclick="refresh()">Refresh</button>
+        </div>
+        <div id="status"></div>
+    </div>
+
+    <h3>Recent orders <span style="font-size: 0.7em; color: var(--muted); font-weight: normal;">— live from SQL Server</span></h3>
+    <div id="orderTableWrap">
+        @if (!Model.Orders.Any())
+        {
+            <p style="color: var(--muted);">No orders yet — click "Create order" above to insert one.</p>
+        }
+        else
+        {
+            <table id="orderTable">
+                <thead><tr><th>id</th><th>customer</th><th>amount</th><th>created (UTC)</th></tr></thead>
+                <tbody id="orderRows">
+                @foreach (var o in Model.Orders)
+                {
+                    <tr><td>@o.Id</td><td>@o.CustomerId</td><td>$@o.Amount.ToString("F2")</td><td>@o.CreatedAt.ToString("u")</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <h2>2 · Verify it yourself in AWS</h2>
+    <p class="lede">Log into the AWS Console with the credentials sent to you separately, then click any bookmark below to jump straight to the resource. No menu hunting.</p>
+    <p><strong>Console URL:</strong> <a href="https://@(Model.AwsAccountId).signin.aws.amazon.com/console" target="_blank" rel="noopener">https://@(Model.AwsAccountId).signin.aws.amazon.com/console</a></p>
+
+    <div class="links">
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/eks/clusters/acme-proof-of-life?region=us-east-1" target="_blank" rel="noopener">
+            <div class="num">01</div>
+            <div class="title">EKS Cluster overview</div>
+            <div class="desc">The Kubernetes control plane. Version, networking, status = ACTIVE.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/eks/clusters/acme-proof-of-life/node-groups?region=us-east-1" target="_blank" rel="noopener">
+            <div class="num">02</div>
+            <div class="title">Node Groups</div>
+            <div class="desc">The 2 spot EC2 instances running your workloads.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/eks/clusters/acme-proof-of-life/workloads?namespace=acme&amp;region=us-east-1" target="_blank" rel="noopener">
+            <div class="num">03</div>
+            <div class="title">Application Pods</div>
+            <div class="desc">The actual .NET app containers in the <code>acme</code> namespace.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/ec2/home?region=us-east-1#LoadBalancers:" target="_blank" rel="noopener">
+            <div class="num">04</div>
+            <div class="title">Application Load Balancer</div>
+            <div class="desc">The ALB serving this URL. Click it to see target groups + healthy pod IPs.</div>
+        </a>
+        <a class="link-card" href="https://@(Model.AwsRegion).console.aws.amazon.com/ecr/repositories/private/@(Model.AwsAccountId)/@(Model.EksCluster)?region=@(Model.AwsRegion)" target="_blank" rel="noopener">
+            <div class="num">05</div>
+            <div class="title">Container Registry</div>
+            <div class="desc">Every CI/CD build pushes here. Tagged images = pipeline evidence.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/vpcconsole/home?region=us-east-1#PeeringConnections:" target="_blank" rel="noopener">
+            <div class="num">06</div>
+            <div class="title">VPC Peering — Enterprise Edge</div>
+            <div class="desc">ADR 003 made real: app VPC ↔ Edge VPC link. Status = ACTIVE.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=acme-proof-of-life-pol" target="_blank" rel="noopener">
+            <div class="num">07</div>
+            <div class="title">CloudWatch Dashboard</div>
+            <div class="desc">Operational observability for the running environment.</div>
+        </a>
+        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/iamv2/home?region=us-east-1#/users" target="_blank" rel="noopener">
+            <div class="num">08</div>
+            <div class="title">Your IAM User</div>
+            <div class="desc">See exactly what your read-only access includes. Transparency from Day 1.</div>
+        </a>
+    </div>
+
+    <h2>3 · What this proves</h2>
+    <div class="proves">
+        <div>Real AWS infrastructure</div><div>Bookmarks 1–7 above resolve to real resources in your account</div>
+        <div>Kubernetes cluster operations</div><div>Bookmarks 2 &amp; 3 — 2 nodes, 2 app pods, 8 system pods, all healthy</div>
+        <div>ALB integration</div><div>Bookmark 4 + the URL you're reading this on</div>
+        <div>End-to-end app code</div><div>This page renders. The "Try it" button writes to a real database.</div>
+        <div>Cross-VPC architecture (ADR 003)</div><div>Bookmark 6 — peering ACTIVE; the table above came through that link</div>
+        <div>CI/CD pipeline</div><div>Bookmark 5 — ECR has tagged images, one per git push to <code>main</code></div>
+        <div>Infrastructure as Code</div><div>The entire environment is in the repo under <code>terraform/</code>. <code>terraform plan</code> from a fresh clone = zero drift.</div>
+        <div>Stakeholder transparency</div><div>You're logged in with your own credentials. You can verify everything independently.</div>
+    </div>
+
+    <h2>4 · Deeper inspection (optional)</h2>
+
+    <h3>Run <code>kubectl</code> against the cluster from your laptop</h3>
+    <p>Same view the engineering team has. Read-only.</p>
+<pre>aws configure --profile acme
+# Paste the access key + secret from your credentials packet
+
+aws eks update-kubeconfig --name acme-proof-of-life \
+  --region us-east-1 --profile acme
+
+kubectl get nodes              # 2 spot nodes, Ready
+kubectl get pods -n acme       # the app pods serving this page
+kubectl logs -n acme -l app=acme-stub --tail=20
+
+# Proof read-only is enforced:
+kubectl delete pod -n acme --all   # → Forbidden</pre>
+
+    <h3>Query the SQL Server directly</h3>
+    <p>SQL Server runs in a private subnet — not reachable from the internet by design. Use SSM port-forward to reach it through your IAM credentials.</p>
+<pre>aws ssm start-session \
+  --target @Model.EdgeSqlInstanceId \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["1433"],"localPortNumber":["11433"]}' \
+  --region us-east-1 --profile acme
+
+# Now connect any SQL client to localhost:11433
+# (Azure Data Studio, DBeaver, sqlcmd, etc.)
+#   Database: AcmeDemo
+#   User + password: in your credentials packet
+#   Permissions: SELECT only
+
+SELECT * FROM dbo.customers;
+SELECT * FROM dbo.orders ORDER BY created_at DESC;</pre>
+
+    <h3>Read the Terraform code</h3>
+    <p>The entire environment is provisioned from <code>terraform/</code> in the repo:</p>
+    <ul style="font-size: 0.92rem;">
+        <li><code>vpc.tf</code> — two VPCs + peering (App + Edge from ADR 003)</li>
+        <li><code>eks.tf</code> — EKS cluster, node group, your access entries</li>
+        <li><code>edge_sql.tf</code> — EC2 + SQL Server 2022 with EBS storage</li>
+        <li><code>alb_controller.tf</code> — AWS Load Balancer Controller via Helm + IRSA</li>
+        <li><code>iam.tf</code> — your read-only IAM users</li>
+    </ul>
+
+</div>
+
+<script>
+async function createOrder() {
+    const status = document.getElementById('status');
+    status.className = '';
+    status.textContent = 'POST /api/orders ...';
+    try {
+        const customerId = parseInt(document.getElementById('customerId').value, 10);
+        const amount = parseFloat(document.getElementById('amount').value);
+        const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customerId, amount })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + (await res.text()));
+        const order = await res.json();
+        status.textContent = '✓ Inserted order #' + order.id + ' — round-tripped through ALB → Pod → VPC peering → SQL Server.';
+        await refresh(order.id);
+    } catch (e) {
+        status.className = 'error';
+        status.textContent = '✗ ' + e.message;
+    }
+}
+
+async function refresh(highlightId) {
+    const res = await fetch('/api/orders');
+    if (!res.ok) return;
+    const orders = await res.json();
+    const wrap = document.getElementById('orderTableWrap');
+    if (orders.length === 0) {
+        wrap.innerHTML = '<p style="color: var(--muted);">No orders yet — click "Create order" above to insert one.</p>';
+        return;
+    }
+    const fmt = d => new Date(d).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+    const rows = orders.map(o =>
+        `<tr class="${o.id === highlightId ? 'new' : ''}"><td>${o.id}</td><td>${o.customerId}</td><td>$${o.amount.toFixed(2)}</td><td>${fmt(o.createdAt)}</td></tr>`
+    ).join('');
+    wrap.innerHTML = `<table><thead><tr><th>id</th><th>customer</th><th>amount</th><th>created (UTC)</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+</script>
+</body>
+</html>

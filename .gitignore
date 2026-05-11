@@ -1,0 +1,67 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!example.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.pidb
+*.userprefs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Secrets / local
+.env
+.env.*
+secrets/
+*.pem
+*.key
+
+# Any file with creds — paste those into Notion/email, never into the repo
+*.creds
+*.credentials
+
+# scripts/deploy.sh rewrites k8s/kustomization.yaml with account-specific
+# values. After cloning, run `git update-index --assume-unchanged k8s/kustomization.yaml`
+# locally so post-deploy edits don't show up in git status. (Not gitignored
+# globally because the template needs to exist in the repo for fresh clones.)
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.tar
+*.zip

@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acme-stub
+  namespace: acme
+  labels:
+    app: acme-stub
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: acme-stub
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: acme-stub
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: acme-stub
+          # kustomize rewrites this image reference at apply time.
+          image: ACME_IMAGE_PLACEHOLDER:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: ConnectionStrings__Default
+              valueFrom:
+                secretKeyRef:
+                  name: acme-db-creds
+                  key: connection-string
+            # Surfaced into the admin page for deep-link bookmarks. Set by
+            # scripts/deploy.sh from the live env, so the source repo stays
+            # free of any AWS account-specific values.
+            - name: AWS_ACCOUNT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: acme-app-context
+                  key: account-id
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: acme-app-context
+                  key: region
+            - name: EKS_CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: acme-app-context
+                  key: cluster-name
+            - name: EDGE_SQL_INSTANCE_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: acme-app-context
+                  key: edge-sql-instance-id
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1654   # 'app' user baked into mcr.microsoft.com/dotnet/aspnet:8.0-jammy
+            runAsGroup: 1654
+            capabilities:
+              drop: [ "ALL" ]

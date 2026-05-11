@@ -1,0 +1,105 @@
+name: Build and Deploy
+
+# SECURITY NOTE: This workflow authenticates to AWS using GitHub Actions
+# secrets (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY). The IAM principal
+# behind those keys MUST be scoped to only:
+#   - ecr:GetAuthorizationToken, ecr:BatchCheckLayerAvailability,
+#     ecr:PutImage, ecr:UploadLayerPart, ecr:CompleteLayerUpload,
+#     ecr:InitiateLayerUpload
+#   - eks:DescribeCluster (to fetch kubeconfig)
+#   - sts:GetCallerIdentity
+# Do NOT use a user with AdministratorAccess. For a stronger setup, switch
+# to OIDC federation: replace the configure-aws-credentials step with
+#   role-to-assume: arn:aws:iam::<account>:role/github-actions-deploy
+# and remove both static-key secrets entirely.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build, push, rollout
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore + build
+        working-directory: app
+        run: |
+          dotnet restore
+          dotnet build --configuration Release --no-restore
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, push image
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE_TAG="${GITHUB_SHA::12}"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+          docker build --platform linux/amd64 \
+            -t "${IMAGE_URI}:${IMAGE_TAG}" \
+            -t "${IMAGE_URI}:latest" \
+            ./app
+          docker push "${IMAGE_URI}:${IMAGE_TAG}"
+          docker push "${IMAGE_URI}:latest"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Install kubectl + kustomize
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.31.0"
+
+      - name: Configure kubeconfig
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Apply manifests
+        working-directory: k8s
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
+        run: |
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz" \
+            | tar xz
+          ./kustomize edit set image "ACME_IMAGE_PLACEHOLDER=${IMAGE_URI}:${IMAGE_TAG}"
+          ./kustomize build . | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: kubectl -n acme rollout status deployment/acme-stub --timeout=5m
+
+      - name: Show ingress
+        run: kubectl -n acme get ingress acme-stub -o wide

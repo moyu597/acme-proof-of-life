@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: acme-stub
+  namespace: acme
+  labels:
+    app: acme-stub
+spec:
+  type: ClusterIP
+  selector:
+    app: acme-stub
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

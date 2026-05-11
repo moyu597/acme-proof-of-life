@@ -1,0 +1,19 @@
+# Stakeholder ClusterRoleBinding. Binds the stakeholder-view ClusterRole
+# (created by Terraform) to the IAM principals reached via EKS access
+# entries. The access entry maps the IAM user to a Kubernetes username
+# matching the IAM user name by default.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: stakeholder-view-binding
+subjects:
+  - kind: User
+    name: acme-cto-readonly
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: acme-vp-readonly
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: stakeholder-view
+  apiGroup: rbac.authorization.k8s.io

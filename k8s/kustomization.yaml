@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: acme
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - stakeholder-rbac.yaml
+
+# Rewrite the placeholder image to the real ECR repo + tag at deploy time.
+# scripts/deploy.sh does this automatically:
+#   kustomize edit set image ACME_IMAGE_PLACEHOLDER=${ECR_REPO}:${IMAGE_TAG}
+#
+# The committed copy stays generic so the repo doesn't embed an AWS account ID.
+# After your first clone, run this so local deploy edits don't show up in git:
+#   git update-index --assume-unchanged k8s/kustomization.yaml
+images:
+  - name: ACME_IMAGE_PLACEHOLDER
+    newName: ACME_IMAGE_PLACEHOLDER
+    newTag: latest
