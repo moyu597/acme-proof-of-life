@@ -158,38 +158,28 @@
             <div class="title">EKS Cluster overview</div>
             <div class="desc">The Kubernetes control plane. Version, networking, status = ACTIVE.</div>
         </a>
-        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/eks/clusters/acme-proof-of-life/node-groups?region=us-east-1" target="_blank" rel="noopener">
-            <div class="num">02</div>
-            <div class="title">Node Groups</div>
-            <div class="desc">The 2 spot EC2 instances running your workloads.</div>
-        </a>
-        <a class="link-card" href="https://us-east-1.console.aws.amazon.com/eks/clusters/acme-proof-of-life/workloads?namespace=acme&amp;region=us-east-1" target="_blank" rel="noopener">
-            <div class="num">03</div>
-            <div class="title">Application Pods</div>
-            <div class="desc">The actual .NET app containers in the <code>acme</code> namespace.</div>
-        </a>
         <a class="link-card" href="https://us-east-1.console.aws.amazon.com/ec2/home?region=us-east-1#LoadBalancers:" target="_blank" rel="noopener">
-            <div class="num">04</div>
+            <div class="num">02</div>
             <div class="title">Application Load Balancer</div>
             <div class="desc">The ALB serving this URL. Click it to see target groups + healthy pod IPs.</div>
         </a>
         <a class="link-card" href="https://@(Model.AwsRegion).console.aws.amazon.com/ecr/repositories/private/@(Model.AwsAccountId)/@(Model.EksCluster)?region=@(Model.AwsRegion)" target="_blank" rel="noopener">
-            <div class="num">05</div>
+            <div class="num">03</div>
             <div class="title">Container Registry</div>
             <div class="desc">Every CI/CD build pushes here. Tagged images = pipeline evidence.</div>
         </a>
         <a class="link-card" href="https://us-east-1.console.aws.amazon.com/vpcconsole/home?region=us-east-1#PeeringConnections:" target="_blank" rel="noopener">
-            <div class="num">06</div>
+            <div class="num">04</div>
             <div class="title">VPC Peering — Enterprise Edge</div>
             <div class="desc">ADR 003 made real: app VPC ↔ Edge VPC link. Status = ACTIVE.</div>
         </a>
         <a class="link-card" href="https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=acme-proof-of-life-pol" target="_blank" rel="noopener">
-            <div class="num">07</div>
+            <div class="num">05</div>
             <div class="title">CloudWatch Dashboard</div>
             <div class="desc">Operational observability for the running environment.</div>
         </a>
         <a class="link-card" href="https://us-east-1.console.aws.amazon.com/iamv2/home?region=us-east-1#/users" target="_blank" rel="noopener">
-            <div class="num">08</div>
+            <div class="num">06</div>
             <div class="title">Your IAM User</div>
             <div class="desc">See exactly what your read-only access includes. Transparency from Day 1.</div>
         </a>
@@ -197,14 +187,14 @@
 
     <h2>3 · What this proves</h2>
     <div class="proves">
-        <div>Real AWS infrastructure</div><div>Bookmarks 1–7 above resolve to real resources in your account</div>
-        <div>Kubernetes cluster operations</div><div>Bookmarks 2 &amp; 3 — 2 nodes, 2 app pods, 8 system pods, all healthy</div>
-        <div>ALB integration</div><div>Bookmark 4 + the URL you're reading this on</div>
-        <div>End-to-end app code</div><div>This page renders. The "Try it" button writes to a real database.</div>
-        <div>Cross-VPC architecture (ADR 003)</div><div>Bookmark 6 — peering ACTIVE; the table above came through that link</div>
-        <div>CI/CD pipeline</div><div>Bookmark 5 — ECR has tagged images, one per git push to <code>main</code></div>
+        <div>Real AWS infrastructure</div><div>Every bookmark above resolves to a live resource in your account</div>
+        <div>ALB integration</div><div>Bookmark 2 — the exact load balancer this URL routes through</div>
+        <div>End-to-end app code</div><div>The "Create order" button writes a row to SQL Server. Verify it via SSM port-forward (Section 4) with <code>SELECT * FROM dbo.orders</code>.</div>
+        <div>CI/CD pipeline</div><div>Bookmark 3 — ECR has tagged images, one per git push to <code>main</code></div>
+        <div>Cross-VPC architecture (ADR 003)</div><div>Bookmark 4 — peering ACTIVE; the order table above traveled that link</div>
+        <div>Operational observability</div><div>Bookmark 5 — CloudWatch dashboard + Edge SQL CPU alarm</div>
         <div>Infrastructure as Code</div><div>The entire environment is in the repo under <code>terraform/</code>. <code>terraform plan</code> from a fresh clone = zero drift.</div>
-        <div>Stakeholder transparency</div><div>You're logged in with your own credentials. You can verify everything independently.</div>
+        <div>Stakeholder transparency</div><div>Bookmark 6 — you're logged in with your own credentials, scoped to read-only. Verify everything independently.</div>
     </div>
 
     <h2>4 · Deeper inspection (optional)</h2>
