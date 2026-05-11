@@ -1,236 +1,145 @@
-# Acme Proof of Life
+# Acme Proof of Life — Infrastructure as Code
 
-Production-grade preview of the target-state Acme architecture: EKS on AWS,
-Terraform, a Dockerised .NET 8 stub talking to SQL Server in a separate Edge
-VPC over peering, GitHub Actions CI/CD, read-only stakeholder access.
+The complete Terraform definition of the target-state Acme architecture from
+**ADR 001** (modern cloud-native platform) and **ADR 003** (Enterprise Edge
+isolation pattern). Every resource in the live demo environment was created
+from the code in this repository — `terraform plan` against the running
+environment produces zero drift.
 
-```
-Internet → ALB → EKS pods (acme-stub) ──peering──→ EC2 SQL Server (Edge VPC)
-                       ↑
-                       └──── GitHub Actions push ───── ECR
-```
-
-Full diagram and trust boundaries: [`docs/architecture.md`](docs/architecture.md).
+The application stub, container manifests, and CI/CD glue are included as
+context, but **the IaC under [`terraform/`](terraform/) is the substantive
+deliverable.**
 
 ---
 
-## Once-only prerequisites
+## The Terraform stack
 
-1. AWS account with billing enabled.
-2. **Set a $100 budget alert** before anything else
-   (Billing → Budgets → monthly cost budget at $100, alert at 50%, 75%, and 90%).
-   Two-week demo expected burn is ~$108 at this repo's defaults.
-3. Local tools (macOS — install via `brew install`):
-   - `awscli` ≥ 2
-   - `terraform` ≥ 1.6
-   - `kubectl` ≥ 1.31
-   - `kustomize`
-   - `helm`
-   - `docker` (Docker Desktop running)
-   - `dotnet` SDK 8
-4. `aws configure` with an IAM user that has `AdministratorAccess`
-   (used only for the bootstrap apply — stakeholders get scoped users).
-5. Verify: `aws sts get-caller-identity` returns your account.
-
-After that, every step below is mechanical.
-
----
-
-## The one-shot
-
-```bash
-cd terraform
-
-# 1. Init providers + modules.
-terraform init
-
-# 2. Two-stage apply. The first target apply creates the EKS cluster
-#    so the kubernetes + helm providers have something to authenticate
-#    against on the next pass.
-terraform apply -target=module.eks -auto-approve
-
-# 3. Full apply (ALB controller via Helm, k8s namespace + RBAC + secret,
-#    CloudWatch dashboard, IAM users, observability).
-terraform apply -auto-approve
-
-# 4. Capture outputs you'll need next.
-export ECR_REPO=$(terraform output -raw ecr_repository_url)
-export CLUSTER=$(terraform output -raw eks_cluster_name)
-export REGION=$(terraform output -raw region)
-aws eks update-kubeconfig --name "$CLUSTER" --region "$REGION"
-
-# 5. First image build + rollout (after this, GitHub Actions takes over).
-cd ..
-IMAGE_TAG=$(git rev-parse --short HEAD 2>/dev/null || date +%s) \
-  scripts/deploy.sh
-
-# 6. Get the ALB URL.
-kubectl -n acme get ingress acme-stub \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}'
-
-# 7. Hit it.
-ALB=$(kubectl -n acme get ingress acme-stub \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-curl "http://$ALB/health"
-curl "http://$ALB/api/customers"
-open "http://$ALB/admin"
-```
-
-End-to-end on a clean account: ~25 minutes (EKS provisioning dominates).
-
----
-
-## Wiring up GitHub Actions (one-time)
-
-After the initial Terraform apply, push the repo to GitHub and add these
-secrets under **Settings → Secrets and variables → Actions**:
-
-| Secret | Source |
+| File | What it provisions |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | An IAM user with permissions to push to ECR + update the EKS deployment. The Terraform-admin user is fine for the demo; tighten in production. |
-| `AWS_SECRET_ACCESS_KEY` | Same. |
-| `AWS_REGION` | `us-east-1` |
-| `EKS_CLUSTER_NAME` | `terraform output -raw eks_cluster_name` |
-| `ECR_REPOSITORY` | `terraform output -raw ecr_repository_url` *without* the `account.dkr.ecr.region.amazonaws.com/` prefix — i.e. just `acme-proof-of-life`. |
-
-Push to `main`. The Actions tab will show build → push → rollout
-finishing in 4–6 minutes.
-
----
-
-## Stakeholder access
-
-Two scoped IAM users are created. Their console passwords + access keys
-are emitted as **sensitive** Terraform outputs. Pull them and paste into
-the Proof of Life Dashboard:
-
-```bash
-cd terraform
-
-# Console URL (same for both)
-terraform output -raw console_signin_url
-
-# CTO
-terraform output -raw cto_iam_username
-terraform output -raw cto_console_password
-terraform output -raw cto_access_key_id
-terraform output -raw cto_secret_access_key
-
-# VP Engineering
-terraform output -raw vp_iam_username
-terraform output -raw vp_console_password
-terraform output -raw vp_access_key_id
-terraform output -raw vp_secret_access_key
-
-# Read-only SQL login (works through SSM port-forward or from inside the cluster)
-terraform output -raw sql_readonly_password
-```
-
-What they get:
-
-- **AWS Console** with `ReadOnlyAccess` → all services visible, nothing
-  mutable.
-- **EKS** view via access entry mapped to `AmazonEKSViewPolicy` +
-  the in-cluster `stakeholder-view` ClusterRole. After
-  `aws eks update-kubeconfig`, `kubectl get pods -n acme` works;
-  `kubectl delete` is rejected by RBAC.
-- **SQL** read-only via the `stakeholder_readonly` login
-  (`GRANT SELECT ON SCHEMA::dbo`).
-
-⚠️ The console passwords + access keys land in `terraform.tfstate` as
-plaintext. State stays on your laptop (local backend). Acceptable for a
-two-week demo. Destroy at the end of the engagement (`terraform destroy`)
-or migrate to an S3 backend with encryption + DynamoDB locking if the
-demo extends.
+| [`versions.tf`](terraform/versions.tf) | Provider versions pinned: AWS 6.x, Kubernetes 2.30+, Helm 2.13+. Default tags applied to every resource for cost attribution. |
+| [`variables.tf`](terraform/variables.tf) | All knobs in one place — region, CIDRs, Kubernetes version, node instance types, capacity type (spot/on-demand), Edge SQL sizing. No hardcoded magic values elsewhere in the stack. |
+| [`vpc.tf`](terraform/vpc.tf) | Two VPCs (`app` + `edge`) with non-overlapping CIDRs, peered together. App VPC has public + private subnets across 2 AZs, a NAT gateway, plus interface endpoints for ECR, STS, Logs, SSM, ELB, EC2 (kubelet egress to AWS APIs from private subnets). Edge VPC is private-by-default. **Mirrors ADR 003.** |
+| [`eks.tf`](terraform/eks.tf) | EKS cluster (k8s 1.31) via the official `terraform-aws-modules/eks` v21 module. Managed node group with diversified spot capacity across `t3.medium`, `t3a.medium`, `t3.large`. IRSA enabled. Access entries map stakeholder IAM users to the cluster's read-only access policy. Bundled add-ons: `vpc-cni`, `kube-proxy`, `coredns`, `eks-pod-identity-agent`. |
+| [`edge_sql.tf`](terraform/edge_sql.tf) | `t3.small` EC2 in the Edge VPC running SQL Server 2022 in Docker. Persistent EBS volume for the database files (encrypted gp3). SSM Session Manager for management (no SSH, no port 22 exposed). User-data script handles install, container start, schema bootstrap, and the read-only stakeholder login. |
+| [`ecr.tf`](terraform/ecr.tf) | Private ECR repository for the application image. Lifecycle policy keeps the 10 most recent images. Image scanning on push. |
+| [`alb_controller.tf`](terraform/alb_controller.tf) | AWS Load Balancer Controller installed via Helm. IRSA-bound IAM role with the published `iam_policy.json` + an inline patch for `ec2:GetSecurityGroupsForVpc` (a permission the v2.8.2 policy missed). Includes a private ECR mirror of the controller image because public registries aren't reachable from the private node subnets. |
+| [`k8s_providers.tf`](terraform/k8s_providers.tf) | Kubernetes and Helm providers configured against the EKS cluster, using `exec` auth (`aws eks get-token`) so a fresh apply doesn't hit a chicken-and-egg auth problem before the cluster exists. |
+| [`k8s_app.tf`](terraform/k8s_app.tf) | Application namespace, SQL connection Secret built from the EC2 private IP + generated SA password, and the stakeholder-view ClusterRole (`get/list/watch` only). |
+| [`iam.tf`](terraform/iam.tf) | Two read-only IAM users (`acme-cto-readonly`, `acme-vp-readonly`) with `ReadOnlyAccess` managed policy + console passwords + access keys. Outputs marked sensitive. |
+| [`observability.tf`](terraform/observability.tf) | CloudWatch log group, dashboard, and an alarm on Edge SQL CPU. |
+| [`outputs.tf`](terraform/outputs.tf) | Every value a stakeholder needs to verify the environment — ALB DNS, cluster name, ECR repo URL, console sign-in URL, IAM user names + generated credentials (sensitive). |
 
 ---
 
-## SSH-less SQL Server access
+## Architecture
 
-```bash
-# Open an interactive shell on the SQL Server EC2 (no port 22 needed).
-aws ssm start-session \
-  --target $(cd terraform && terraform output -raw edge_sql_instance_id) \
-  --region us-east-1
-
-# Inside the session — run an ad-hoc query.
-sudo docker exec -it mssql /opt/mssql-tools18/bin/sqlcmd \
-  -S localhost -U sa -P "$(aws ssm get-parameter ...)" -No \
-  -Q "SELECT TOP 5 * FROM AcmeDemo.dbo.customers"
 ```
+                                Internet
+                                    │
+                                    ▼
+                    ┌───────────────────────────────────┐
+                    │  AWS Application Load Balancer    │
+                    └───────────────┬───────────────────┘
+                                    │
+                ┌───────────────────┴───────────────────┐
+                │                                       │
+                │  App VPC  (10.0.0.0/16)               │
+                │  ┌─────────────────────────────────┐  │
+                │  │  EKS Cluster                    │  │
+                │  │  ─ managed node group (spot)    │  │
+                │  │  ─ acme-stub Deployment         │  │
+                │  │  ─ AWS LB Controller (Helm)     │  │
+                │  └─────────────────────────────────┘  │
+                │                                       │
+                │  VPC interface endpoints              │
+                │  (ECR, STS, Logs, SSM, ELB, …)        │
+                └───────────────┬───────────────────────┘
+                                │
+                       VPC peering (ADR 003)
+                                │
+                ┌───────────────┴───────────────────────┐
+                │                                       │
+                │  Edge VPC  (10.1.0.0/16)              │
+                │  ┌─────────────────────────────────┐  │
+                │  │  EC2 (t3.small)                 │  │
+                │  │  Docker → SQL Server 2022       │  │
+                │  │  Encrypted EBS                  │  │
+                │  └─────────────────────────────────┘  │
+                │                                       │
+                │  SSM-only management (no SSH/22)      │
+                └───────────────────────────────────────┘
+```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full Mermaid
+diagram and trust-boundary table.
 
 ---
 
-## Cost & teardown
+## How the layers fit together
 
-One-week burn at this repo's default settings (spot nodes, **VPC endpoints
-in place of a NAT gateway**, full observability):
-
-| Component | Hourly | Weekly |
-|---|---|---|
-| EKS control plane | $0.10 | $16.80 |
-| 2× t3.medium nodes (spot) | $0.026 | $4.20 |
-| Edge SQL t3.small EC2 | $0.021 | $3.49 |
-| Application Load Balancer | $0.023 | $4.78 |
-| 8× VPC interface endpoints | $0.08 | $13.44 |
-| EBS volumes (~70 GB gp3) | — | $1.30 |
-| CloudWatch + Container Insights | — | $8–10 |
-| ECR storage, data transfer, misc | — | ~$2 |
-| **Total (repo default)** | | **~$54/week** |
-
-How this lines up against the three reference configurations:
-
-| Configuration | One-week cost | This repo |
-|---|---|---|
-| Full (on-demand nodes, NAT gateway, full observability) | ~$62 | flip `node_capacity_type = "ON_DEMAND"` and add a NAT |
-| Cost-optimised (spot, no NAT, basic CloudWatch) | ~$38 | drop interface endpoints + put nodes in public subnets |
-| Bare minimum (spot, smaller nodes, no NAT, basic CloudWatch, NLB) | ~$28 | additional swap to NLB + t3.small nodes |
-| **What this repo actually deploys** | **~$54** | spot + private subnets + VPC endpoints (production-shape) |
-
-The repo trades ~$13/week for a production-grade private-subnet topology:
-nodes have no public IPs and reach ECR / SSM / logs via interface endpoints.
-The original "$38 cost-optimised" line achieves its number by putting nodes
-in public subnets — fine for a demo, but a worse story when the CTO asks
-"how does traffic leave the cluster?"
-
-For a two-week interview window: **~$108 expected, set the budget alert
-to $100** (raise from the original $75 noted below).
-
-Teardown:
-
-```bash
-cd terraform
-terraform destroy -auto-approve
+```
+terraform/      →  Provisions AWS infrastructure + Kubernetes namespace/RBAC
+   │
+   └──→ outputs.tf surfaces ECR URL, cluster name, ALB DNS
+            │
+            ▼
+   k8s/         →  Application Deployment / Service / Ingress (via Kustomize)
+            │
+            └──→ AWS Load Balancer Controller provisions an ALB
+                     │
+                     ▼
+   app/         →  .NET 8 stub serving /admin (Razor) and /api/* (controllers)
+                   Image built + pushed to ECR by scripts/deploy.sh or CI
+            │
+            └──→ Pod connects to SQL Server via VPC peering using a
+                 Kubernetes Secret synthesized by terraform/k8s_app.tf
 ```
 
-If `terraform destroy` hangs on the EKS module (it sometimes does because
-the ALB controller leaves a Target Group behind), run:
-
-```bash
-kubectl delete ingress -n acme acme-stub --wait=true
-kubectl delete deployment -n acme acme-stub --wait=true
-terraform destroy -auto-approve
-```
+`scripts/deploy.sh` is the glue — pulls Terraform outputs, builds the image,
+pushes to ECR, edits the Kustomization image reference, and kicks off the
+rollout. The CI workflow at [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+runs the same flow on every push to `main`.
 
 ---
 
-## Deviations from the original brief
+## Operational decisions worth noting
 
-Documented in [`docs/architecture.md`](docs/architecture.md). Short version:
+| Decision | Rationale |
+|---|---|
+| **Spot nodes by default** | Diversified across 3 instance types so a single capacity event can't drain the cluster. Switch to on-demand with `node_capacity_type = "ON_DEMAND"`. |
+| **EKS access entries, not the `aws-auth` ConfigMap** | Module v21+ default. The ConfigMap path is legacy and being deprecated by AWS. |
+| **NAT gateway in the app VPC** | Necessary for nodes to pull public images and reach AWS APIs the interface endpoints don't cover. Single NAT (not per-AZ) keeps cost predictable. |
+| **SQL Server on EC2 in a separate VPC, not RDS** | Mirrors ADR 003's Enterprise Edge pattern. In production the peering link is swapped for Direct Connect to the on-premises data centre; the application tier doesn't know the difference. |
+| **Private ECR mirror for the ALB controller image** | Public ECR (`public.ecr.aws`) isn't covered by ECR VPC endpoints. Mirroring is the cleanest fix that keeps nodes' egress controlled. |
+| **`security_group_additional_rules` for node→API on 443** | EKS module v21 doesn't include node-to-cluster-API ingress by default. Without this, kubelets can't register. |
+| **`Encrypt=true` on the SQL connection string** | TLS on the wire even over private peering. `TrustServerCertificate=true` accepts the container's self-signed cert. |
 
-1. SQL Server is on EC2 in an Edge VPC (matches ADR 003), not RDS.
-2. No NAT gateway — VPC endpoints instead.
-3. EKS auth uses access entries (v21 default), not the legacy
-   `aws-auth` ConfigMap.
+---
 
 ## Repo layout
 
 ```
 acme-proof-of-life/
-├── terraform/        # Everything below the k8s namespace
-├── app/              # .NET 8 stub (health, customers, orders, /admin)
-├── k8s/              # Deployment, Service, Ingress, RBAC (via kustomize)
-├── scripts/deploy.sh # Image-to-cluster helper
-├── .github/workflows # CI on push to main
-└── docs/             # Architecture diagram + deviations
+├── terraform/                # The infrastructure (this is the deliverable)
+├── app/                      # .NET 8 stub demonstrating the platform end-to-end
+├── k8s/                      # Application Kubernetes manifests
+├── scripts/
+│   ├── deploy.sh             # Image → ECR → rollout pipeline (local + CI)
+│   └── mirror-alb-controller.sh   # One-time public ECR → private ECR mirror
+├── .github/workflows/        # CI: build + push + rollout on every push to main
+└── docs/                     # Architecture diagram + deviations log
 ```
+
+---
+
+## Verifying against the live environment
+
+Stakeholders with the read-only IAM credentials (provided separately) can
+run `terraform plan` from a clean clone with their access keys configured.
+The expected output is:
+
+```
+No changes. Your infrastructure matches the configuration.
+```
+
+That equivalence — code = running environment — is the point.
